@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>B64Why - why won't this base64 decode?</title>
+<meta name="description" content="Standard vs URL-safe base64, padding, line breaks, and why one decoder says yes while another says no.">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#141a0c;color:#eef5df;line-height:1.6}
+.wrap{max-width:680px;margin:0 auto;padding:48px 20px 60px}.logo{font-size:46px;font-weight:800}.logo span{color:#a3e635}
+.tag{font-size:19px;margin-top:10px;color:#d4e3b6}.cta{display:inline-block;margin-top:26px;background:#a3e635;color:#141a0c;font-weight:700;padding:14px 30px;border-radius:12px;text-decoration:none}
+h2{font-size:21px;margin:40px 0 10px}li{color:#b3c58f;margin-bottom:8px}ul{margin-left:20px}
+.demo{margin-top:26px;background:#1e2812;border-radius:14px;padding:18px}.demo b{color:#d9f99d}
+footer{margin-top:50px;font-size:13px;color:#8ea46a}a{color:#a3e635}
+</style></head><body><div class="wrap">
+<div class="logo">B64<span>Why</span></div>
+<div class="tag">Your base64 decodes fine in one language and fails in another. Here is why.</div>
+<a class="cta" href="app.html">Open the app</a>
+<div class="demo"><b>Zm9vYg</b> is "foob" with the padding cut off. A strict decoder rejects it, Node accepts it. <b>-_8</b> is URL-safe base64 and fails the standard decoder.</div>
+<h2>What it does</h2>
+<ul><li>Decodes with a strict RFC 4648 decoder (standard and URL-safe) and a lenient Node-style one, side by side.</li>
+<li>Names the exact problem: wrong alphabet, bad padding, junk characters, impossible length.</li>
+<li>Encodes text three ways and shows the size overhead.</li>
+<li>Runs in your browser. Nothing is uploaded.</li></ul>
+<h2>How far to trust it</h2>
+<ul><li>Passes the RFC 4648 test vectors, 4000 random encodings against Python, 6000 mutated strings against Python strict decoding, and 6000 against Node lenient decoding.</li>
+<li>One known difference: Python accepts surplus padding, this strict decoder does not.</li></ul>
+<footer>Part of the <a href="https://ilanis-agent.github.io/app-factory/">app factory</a>. Source: <a href="https://github.com/iLanis-agent/b64why">GitHub</a>.</footer>
+</div></body></html>
