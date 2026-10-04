@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>B64Why app - why won't this base64 decode?</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#141a0c;color:#eef5df;line-height:1.5}
+.wrap{max-width:800px;margin:0 auto;padding:28px 16px 50px}
+h1{font-size:28px}h1 span{color:#a3e635}.sub{color:#b3c58f;margin:6px 0 14px}
+textarea{width:100%;height:110px;background:#1e2812;color:#eef5df;border:1px solid #435b22;border-radius:10px;padding:12px;font:15px ui-monospace,Menlo,Consolas,monospace}
+.tabs button,.pre button{background:#243016;color:#d9f99d;border:1px solid #435b22;border-radius:20px;padding:6px 14px;margin:0 6px 8px 0;cursor:pointer;font-size:13px}
+.tabs button.on{background:#a3e635;color:#141a0c;font-weight:700}
+table{width:100%;border-collapse:collapse;margin-top:14px;font-size:14px}th,td{text-align:left;padding:9px 8px;border-bottom:1px solid #2f4018;vertical-align:top}th{color:#b3c58f;font-weight:600}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;color:#d9f99d;word-break:break-all}.err{color:#fca5a5}.warn{color:#fcd34d}.ok{color:#86efac}
+.card{margin-top:16px;padding:12px 14px;border-radius:12px;background:#1e2812}.note{color:#8ea46a;font-size:13px;margin-top:18px}a{color:#a3e635}small{color:#b3c58f}
+</style></head><body><div class="wrap">
+<h1>B64<span>Why</span></h1>
+<div class="sub">Paste base64 to see why a decoder accepts or rejects it. Or switch to Encode.</div>
+<div class="tabs"><button id="tdec" class="on">Decode</button><button id="tenc">Encode</button></div>
+<div class="pre" id="pre"></div>
+<textarea id="in" spellcheck="false" aria-label="input"></textarea>
+<div id="out"></div>
+<div class="note">Strict follows RFC 4648: standard alphabet (section 4) needs correct padding, URL-safe (section 5) with padding optional, and anything outside the alphabet is rejected (section 3.3). Lenient copies what Node does: both alphabets, skips junk, stops at the first "=". Python rejects junk but accepts surplus padding, which this strict decoder does not. Text is shown as UTF-8 only when the bytes are valid UTF-8.</div>
+<p class="note"><a href="index.html">Back</a></p>
+</div>
+<script>
+(function (root) {
+  'use strict';
+  var STD = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  var URL_ = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  function encode(bytes, opt) {
+    opt = opt || {}; var A = opt.url ? URL_ : STD, out = '', i;
+    for (i = 0; i + 2 < bytes.length; i += 3) { var n = bytes[i] << 16 | bytes[i + 1] << 8 | bytes[i + 2]; out += A[n >> 18] + A[n >> 12 & 63] + A[n >> 6 & 63] + A[n & 63]; }
+    var r = bytes.length - i;
+    if (r === 1) { out += A[bytes[i] >> 2] + A[(bytes[i] & 3) << 4] + (opt.nopad ? '' : '=='); }
+    else if (r === 2) { var m = bytes[i] << 8 | bytes[i + 1]; out += A[m >> 10] + A[m >> 4 & 63] + A[(m & 15) << 2] + (opt.nopad ? '' : '='); }
+    if (opt.wrap) { var lines = []; for (var j = 0; j < out.length; j += opt.wrap) lines.push(out.slice(j, j + opt.wrap)); out = lines.join('\r\n'); }
+    return out;
+  }
+  // Strict decode (RFC 4648 section 3.3: reject anything outside the alphabet).
+  // padding 'required' (section 4) or 'optional' (section 5 allows omitting it when the spec says so).
+  function strict(s, url, padding) {
+    var A = url ? URL_ : STD, i, body = s, pads = 0;
+    var m = /=*$/.exec(s); pads = m[0].length; body = s.slice(0, s.length - pads);
+    for (i = 0; i < body.length; i++) if (A.indexOf(body[i]) < 0) return { error: 'Character ' + JSON.stringify(body[i]) + ' at position ' + (i + 1) + ' is not in the ' + (url ? 'URL-safe' : 'standard') + ' alphabet' + (STD.indexOf(body[i]) >= 0 || URL_.indexOf(body[i]) >= 0 ? ' (it belongs to the other one)' : '') + '.' };
+    if (body.length % 4 === 1) return { error: 'Length leaves a single leftover character, which can never be valid.' };
+    var need = (4 - body.length % 4) % 4;
+    if (pads) { if (pads !== need) return { error: pads + ' padding characters, expected ' + need + '.' }; }
+    else if (need && padding === 'required') return { error: 'Missing ' + need + ' padding character' + (need > 1 ? 's' : '') + ' (length must be a multiple of 4).' };
+    return decodeBody(body, A);
+  }
+  function decodeBody(body, A) {
+    var out = [], acc = 0, bits = 0, i;
+    for (i = 0; i < body.length; i++) { acc = (acc << 6) | A.indexOf(body[i]); bits += 6; if (bits >= 8) { bits -= 8; out.push((acc >> bits) & 255); acc &= (1 << bits) - 1; } }
+    return { bytes: Uint8Array.from(out), canonical: acc === 0 };
+  }
+  // Lenient decode in the style of Node's Buffer.from(s, 'base64'): both alphabets, skips anything else, stops at the first "=".
+  function lenient(s) {
+    var body = '', i, c; for (i = 0; i < s.length; i++) { c = s[i]; if (c === '=') break; if (STD.indexOf(c) >= 0 || c === '-' || c === '_') body += c === '-' ? '+' : c === '_' ? '/' : c; }
+    if (body.length % 4 === 1) body = body.slice(0, -1);
+    var r = decodeBody(body, STD); return { bytes: r.bytes, canonical: r.canonical, skipped: s.replace(/=+$/, '').length - body.length };
+  }
+  function hex(b) { return Array.prototype.map.call(b, function (x) { return (x < 16 ? '0' : '') + x.toString(16); }).join(''); }
+  function text(b) { try { return new TextDecoder('utf-8', { fatal: true }).decode(b); } catch (e) { return null; } }
+  var api = { encode: encode, strict: strict, lenient: lenient, hex: hex, text: text, STD: STD, URL: URL_ };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.B64Why = api;
+})(typeof window !== 'undefined' ? window : this);
+
+var mode='dec',PD=[['Standard','Zm9vYmFy'],['URL-safe, no padding','-_8'],['Missing padding','Zm9vYg'],['Mixed alphabets','ab+c_d8='],['Line breaks','Zm9v\nYmFy'],['Bad pad bits','Zh=='],['JWT part','eyJhbGciOiJIUzI1NiJ9']],PE=[['foobar','foobar'],['Emoji','héllo 🌍'],['Two bytes','ÿþ']];
+function esc(s){return String(s).replace(/[&<>]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
+function show(b){var t=B64Why.text(b);return '<code>'+esc(B64Why.hex(b)||'(empty)')+'</code>'+(t!==null&&t.length&&!/[\u0000-\u0008\u000e-\u001f]/.test(t)?'<br><small>text: '+esc(t)+'</small>':b.length?'<br><small>not text (binary or invalid UTF-8)</small>':'')+'<br><small>'+b.length+' bytes</small>'}
+function cell(r){return r.error?'<span class="err">'+esc(r.error)+'</span>':'<span class="ok">Accepted.</span>'+(r.canonical===false?' <span class="warn">Leftover bits are not zero (non-canonical, RFC 4648 section 3.5).</span>':'')+'<br>'+show(r.bytes)}
+function run(){
+ var v=document.getElementById('in').value,o=document.getElementById('out'),h='';
+ if(mode==='dec'){
+  var s=v.trim(),l=B64Why.lenient(v);
+  h='<table><thead><tr><th>Decoder</th><th>Result</th></tr></thead><tbody>';
+  h+='<tr><td>Strict, standard (RFC 4648 s.4)</td><td>'+cell(B64Why.strict(v,false,'required'))+'</td></tr>';
+  h+='<tr><td>Strict, URL-safe (s.5, padding optional)</td><td>'+cell(B64Why.strict(v,true,'optional'))+'</td></tr>';
+  h+='<tr><td>Lenient (Node style)</td><td><span class="ok">Always answers.</span>'+(l.skipped?' <span class="warn">Skipped '+l.skipped+' character'+(l.skipped>1?'s':'')+'.</span>':'')+'<br>'+show(l.bytes)+'</td></tr></tbody></table>';
+  var hints=[];if(/[\s]/.test(v.trim()))hints.push('Contains whitespace or line breaks: strict decoders reject it, MIME-style ones ignore it.');
+  if(/[+\/]/.test(s)&&/[-_]/.test(s))hints.push('Mixes + / with - _: it cannot be valid in either alphabet.');
+  else if(/[-_]/.test(s))hints.push('Uses - or _: this is the URL-safe alphabet.');else if(/[+\/]/.test(s))hints.push('Uses + or /: this is the standard alphabet.');
+  if(/[^=]$/.test(s)&&s.replace(/=+$/,'').length%4)hints.push('Length is not a multiple of 4 and has no padding.');
+  if(hints.length)h+='<div class="card">'+hints.map(function(x){return esc(x)}).join('<br>')+'</div>';
+ }else{
+  var b=new TextEncoder().encode(v),st=B64Why.encode(b),n=b.length;
+  h='<table><thead><tr><th>Form</th><th>Output</th></tr></thead><tbody>';
+  h+='<tr><td>Standard, padded</td><td><code>'+esc(st)+'</code></td></tr>';
+  h+='<tr><td>URL-safe, no padding</td><td><code>'+esc(B64Why.encode(b,{url:true,nopad:true}))+'</code></td></tr>';
+  h+='<tr><td>MIME (76 per line, CRLF)</td><td><code>'+esc(B64Why.encode(b,{wrap:76})).replace(/\r\n/g,'<br>')+'</code></td></tr></tbody></table>';
+  h+='<div class="card">'+n+' bytes in, '+st.length+' characters out ('+(n?Math.round(st.length/n*100):0)+'% of the original size). Input is encoded as UTF-8.</div>';
+ }
+ o.innerHTML=h;
+}
+function setMode(m){mode=m;document.getElementById('tdec').className=m==='dec'?'on':'';document.getElementById('tenc').className=m==='enc'?'on':'';var p=document.getElementById('pre');p.innerHTML='';(m==='dec'?PD:PE).forEach(function(x){var b=document.createElement('button');b.textContent=x[0];b.onclick=function(){document.getElementById('in').value=x[1];run()};p.appendChild(b)});document.getElementById('in').value=(m==='dec'?PD:PE)[0][1];run()}
+document.getElementById('tdec').onclick=function(){setMode('dec')};document.getElementById('tenc').onclick=function(){setMode('enc')};
+document.getElementById('in').addEventListener('input',run);setMode('dec');document.getElementById('in').value='Zm9vYg';run();
+</script></body></html>
